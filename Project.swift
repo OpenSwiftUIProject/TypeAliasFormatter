@@ -28,7 +28,7 @@ let project = Project(
             buildableFolders: ["App/Sources", "App/Resources"],
             dependencies: [.external(name: "TypeAliasFormatterCore")],
             settings: .settings(base: [
-                "MARKETING_VERSION": "0.2.0",
+                "MARKETING_VERSION": "0.2.1",
                 "CURRENT_PROJECT_VERSION": "1",
                 "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                 "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",

@@ -14,7 +14,7 @@ private names such as `(Modifier in _123ABC)<Style>`.
 
 Paste one typealias or type in the source pane. The output updates as you type.
 The converter removes a leading `typealias Name =` declaration before parsing.
-The app starts with the complete `DefaultLabelStyle.Body` example.
+The app opens with an empty source pane.
 
 - Multiple generic arguments use separate lines and four-space indentation.
 - Choose **2 spaces**, **4 spaces**, **8 spaces**, or **Tab** for indentation.
@@ -144,7 +144,7 @@ checks stdin, stdout, error exits, and SVG output with the built executable.
 
 ## Release
 
-Push a tag in `vMAJOR.MINOR.PATCH` format, such as `v0.2.0`, to run the Release
+Push a tag in `vMAJOR.MINOR.PATCH` format, such as `v0.2.1`, to run the Release
 workflow. It uses Xcode 26.6 and Tuist 4.206.0 to test Core and the CLI, then
 build the universal GUI and CLI for Apple Silicon and Intel. The app version
 comes from the tag, and the build number comes from the workflow run number.

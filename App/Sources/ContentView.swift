@@ -20,7 +20,7 @@ private struct FormatRequest: Hashable, Sendable {
 }
 
 struct ContentView: View {
-    @State private var source = Self.example
+    @State private var source = ""
     @State private var formatted = ""
     @State private var graph: TypeGraphNode?
     @State private var collapsedNodes: Set<String> = []
@@ -33,14 +33,6 @@ struct ContentView: View {
     @AppStorage("wrapSourceLines") private var wrapSourceLines = true
     @AppStorage("expandSingleArguments") private var expandSingleArguments = false
     @AppStorage("presentationMode") private var outputMode: OutputMode = .text
-
-    private static var example: String {
-        guard let url = Bundle.main.url(forResource: "DefaultLabelStyle", withExtension: "txt"),
-              let source = try? String(contentsOf: url, encoding: .utf8) else {
-            return "typealias Body = ModifiedContent<Label<Title, Icon>, StyleModifier<Style>>"
-        }
-        return source.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
 
     private var request: FormatRequest {
         FormatRequest(source: source, indentation: indentation,
@@ -71,12 +63,10 @@ struct ContentView: View {
         }
         .frame(minWidth: 850, minHeight: 480)
         .toolbar {
-            ToolbarItemGroup(placement: .navigation) {
+            ToolbarItem(placement: .navigation) {
                 Button(action: openFile) { Label("Open", systemImage: "folder") }
                     .help("Open a Swift, Markdown, or text file")
                     .keyboardShortcut("o")
-                Button { source = Self.example } label: { Label("Example", systemImage: "curlybraces") }
-                    .help("Load the DefaultLabelStyle example")
             }
             ToolbarItemGroup {
                 if outputMode == .text {
@@ -267,8 +257,7 @@ struct ContentView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [outputMode.contentType]
         panel.canCreateDirectories = true
-        let name = source == Self.example ? "DefaultLabelStyle.Body" : "FormattedTypealias"
-        panel.nameFieldStringValue = "\(name).\(outputMode.fileExtension)"
+        panel.nameFieldStringValue = "FormattedTypealias.\(outputMode.fileExtension)"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let content = outputMode == .graph ? graphLayout?.svg ?? "" : output + "\n"
         do { try content.write(to: url, atomically: true, encoding: .utf8) }
