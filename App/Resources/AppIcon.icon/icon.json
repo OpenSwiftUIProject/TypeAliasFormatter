@@ -1,0 +1,102 @@
+{
+  "fill": {
+    "linear-gradient": [
+      "extended-srgb:0.15686,0.72549,1.00000,1.00000",
+      "extended-srgb:0.01961,0.15294,0.83922,1.00000"
+    ],
+    "orientation": {
+      "start": {
+        "x": 0,
+        "y": 0
+      },
+      "stop": {
+        "x": 0.85,
+        "y": 1
+      }
+    }
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "01-Brackets.svg",
+          "name": "01-Brackets"
+        }
+      ],
+      "name": "Brackets",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.55
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.04
+      },
+      "specular-specializations": [
+        {
+          "value": false
+        },
+        {
+          "appearance": "tinted",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "Indentation",
+      "layers": [
+        {
+          "image-name": "02-First-Line.svg",
+          "name": "02-First-Line",
+          "fill": {
+            "linear-gradient": [
+              "extended-srgb:0.55294,0.91765,1.00000,1.00000",
+              "extended-srgb:0.21176,0.70980,0.94902,1.00000"
+            ]
+          }
+        },
+        {
+          "image-name": "03-Second-Line.svg",
+          "name": "03-Second-Line",
+          "fill": {
+            "linear-gradient": [
+              "extended-srgb:0.83529,0.68235,1.00000,1.00000",
+              "extended-srgb:0.61569,0.41961,0.93725,1.00000"
+            ]
+          }
+        },
+        {
+          "image-name": "04-Third-Line.svg",
+          "name": "04-Third-Line",
+          "fill": {
+            "linear-gradient": [
+              "extended-srgb:0.55294,0.91765,1.00000,1.00000",
+              "extended-srgb:0.21176,0.70980,0.94902,1.00000"
+            ]
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.65
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.04
+      },
+      "specular-specializations": [
+        {
+          "value": false
+        },
+        {
+          "appearance": "tinted",
+          "value": true
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "circles": [],
+    "squares": "shared"
+  }
+}

@@ -35,6 +35,8 @@ let project = Project(
             buildableFolders: ["App/Sources", "App/Resources"],
             dependencies: [.target(name: "TypeAliasFormatting")],
             settings: .settings(base: [
+                "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
+                "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
                 "ENABLE_APP_SANDBOX": "YES",
                 "ENABLE_USER_SELECTED_FILES": "readwrite",
                 "ENABLE_HARDENED_RUNTIME": "YES",

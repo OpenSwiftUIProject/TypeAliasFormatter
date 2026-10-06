@@ -1,4 +1,8 @@
-# TypeAlias Formatter
+<p align="center">
+  <img src="Documentation/Images/app-icon-composer.png" alt="TypeAlias Formatter app icon" width="128" height="128">
+</p>
+
+<h1 align="center">TypeAlias Formatter</h1>
 
 A native macOS utility that formats nested Swift typealiases and demangled type
 names. It preserves private names such as `(Modifier in _123ABC)<Style>`.
@@ -37,7 +41,7 @@ All formatting runs locally. The app has no network dependency.
 
 ## Develop
 
-Requires macOS 14 or later, Xcode 16 or later, and Tuist 4 with buildable folder
+Requires macOS 14 or later, Xcode 26 or later, and Tuist 4 with buildable folder
 support. The initial project was verified with Tuist 4.206.0 and Xcode 26.6.
 
 ```sh
@@ -48,6 +52,15 @@ open TypeAliasFormatter.xcworkspace
 Select the `TypeAliasFormatter` scheme and run the app. Edit `Project.swift` to
 change the project. Generated Xcode files and build products are ignored by Git.
 The project uses buildable folders, so new source files do not need regeneration.
+
+The app icon source is `App/Resources/AppIcon.icon`. Open it in Icon Composer to
+edit the four SVG layers, the background, or the material effects. Xcode generates
+all icon sizes and appearances, including icons for older macOS releases, from
+this file. See [Apple's Icon Composer documentation](https://developer.apple.com/documentation/xcode/creating-your-app-icon-using-icon-composer).
+
+`AccentColor` in `App/Resources/Assets.xcassets` defines the app's blue accent for
+light and dark appearances. The README icon is exported from Icon Composer to
+`Documentation/Images/app-icon-composer.png`.
 
 ```sh
 xcodebuild build \
