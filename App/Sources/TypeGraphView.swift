@@ -1,5 +1,5 @@
 import SwiftUI
-import TypeAliasFormatting
+import TypeAliasFormatterCore
 
 struct TypeGraphView: View {
     let root: TypeGraphNode

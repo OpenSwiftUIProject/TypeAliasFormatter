@@ -12,17 +12,10 @@ let project = Project(
     ]),
     targets: [
         .target(
-            name: "TypeAliasFormatting",
-            destinations: .macOS,
-            product: .staticFramework,
-            bundleId: "org.openswiftuiproject.openswiftui.typealiasformatter.core",
-            deploymentTargets: .macOS("14.0"),
-            buildableFolders: ["Sources/TypeAliasFormatting"]
-        ),
-        .target(
-            name: "TypeAliasFormatter",
+            name: "TypeAliasFormatterApp",
             destinations: .macOS,
             product: .app,
+            productName: "TypeAliasFormatter",
             bundleId: "org.openswiftuiproject.openswiftui.typealiasformatter",
             deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(with: [
@@ -33,9 +26,9 @@ let project = Project(
                 "NSHumanReadableCopyright": "Copyright © 2026 OpenSwiftUI Project",
             ]),
             buildableFolders: ["App/Sources", "App/Resources"],
-            dependencies: [.target(name: "TypeAliasFormatting")],
+            dependencies: [.external(name: "TypeAliasFormatterCore")],
             settings: .settings(base: [
-                "MARKETING_VERSION": "0.1.0",
+                "MARKETING_VERSION": "0.2.0",
                 "CURRENT_PROJECT_VERSION": "1",
                 "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                 "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
@@ -45,28 +38,33 @@ let project = Project(
             ])
         ),
         .target(
-            name: "TypeAliasFormattingTests",
+            name: "TypeAliasFormatterCLI",
             destinations: .macOS,
-            product: .unitTests,
-            bundleId: "org.openswiftuiproject.openswiftui.typealiasformatter.tests",
+            product: .commandLineTool,
+            productName: "typealias-formatter",
+            bundleId: "org.openswiftuiproject.openswiftui.typealiasformatter.cli",
             deploymentTargets: .macOS("14.0"),
-            buildableFolders: ["Tests/TypeAliasFormattingTests"],
-            dependencies: [.target(name: "TypeAliasFormatting")]
+            infoPlist: nil,
+            buildableFolders: ["CLI/Sources"],
+            dependencies: [
+                .external(name: "TypeAliasFormatterCore"),
+                .external(name: "ArgumentParser"),
+            ],
+            settings: .settings(base: ["PRODUCT_MODULE_NAME": "TypeAliasFormatterCLI"])
         ),
     ],
     schemes: [
         .scheme(
-            name: "TypeAliasFormatter",
-            buildAction: .buildAction(targets: ["TypeAliasFormatter"]),
-            testAction: .targets(["TypeAliasFormattingTests"]),
-            runAction: .runAction(configuration: .debug, executable: "TypeAliasFormatter")
+            name: "TypeAliasFormatterApp",
+            buildAction: .buildAction(targets: ["TypeAliasFormatterApp"]),
+            runAction: .runAction(configuration: .debug, executable: "TypeAliasFormatterApp")
         ),
         .scheme(
-            name: "TypeAliasFormattingTests",
-            buildAction: .buildAction(targets: ["TypeAliasFormattingTests"]),
-            testAction: .targets(["TypeAliasFormattingTests"])
+            name: "TypeAliasFormatterCLI",
+            buildAction: .buildAction(targets: ["TypeAliasFormatterCLI"]),
+            runAction: .runAction(configuration: .debug, executable: "TypeAliasFormatterCLI")
         ),
     ],
-    additionalFiles: ["README.md", "Package.swift"],
+    additionalFiles: ["README.md", "Package.swift", "CLI/Tests", "Licenses", "Scripts"],
     resourceSynthesizers: []
 )

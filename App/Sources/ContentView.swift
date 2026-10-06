@@ -1,6 +1,6 @@
 import AppKit
 import SwiftUI
-import TypeAliasFormatting
+import TypeAliasFormatterCore
 import UniformTypeIdentifiers
 
 private enum OutputMode: String, CaseIterable, Identifiable {

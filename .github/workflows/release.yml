@@ -9,7 +9,7 @@ on:
       version:
         description: App version for a build-only run
         required: true
-        default: '0.1.0'
+        default: '0.2.0'
         type: string
 
 permissions:
@@ -25,12 +25,13 @@ defaults:
 
 jobs:
   build:
-    name: Build macOS app
+    name: Build macOS app and CLI
     runs-on: macos-26
     timeout-minutes: 20
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
       asset-name: ${{ steps.version.outputs.asset-name }}
+      cli-asset-name: ${{ steps.version.outputs.cli-asset-name }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     steps:
@@ -56,6 +57,7 @@ jobs:
           {
             echo "version=$version"
             echo "asset-name=TypeAliasFormatter-v${version}-macOS.zip"
+            echo "cli-asset-name=TypeAliasFormatterCLI-v${version}-macOS.zip"
           } >> "$GITHUB_OUTPUT"
 
       - name: Install Tuist
@@ -64,48 +66,63 @@ jobs:
           tool_versions: |
             tuist 4.206.0
 
-      - name: Test formatting library
-        run: swift test
+      - name: Test Core and CLI
+        run: |
+          swift test --package-path Packages/TypeAliasFormatterCore
+          swift test
 
       - name: Generate workspace
-        run: tuist generate --no-open
+        run: |
+          tuist install
+          tuist generate --no-open
 
-      - name: Build universal app
+      - name: Build universal app and CLI
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          xcodebuild build \
-            -workspace TypeAliasFormatter.xcworkspace \
-            -scheme TypeAliasFormatter \
-            -configuration Release \
-            -destination 'generic/platform=macOS' \
-            -derivedDataPath DerivedData \
-            ARCHS='arm64 x86_64' \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY=- \
-            MARKETING_VERSION="$APP_VERSION" \
-            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+          for scheme in TypeAliasFormatterApp TypeAliasFormatterCLI; do
+            xcodebuild build \
+              -workspace TypeAliasFormatter.xcworkspace \
+              -scheme "$scheme" \
+              -configuration Release \
+              -destination 'generic/platform=macOS' \
+              -derivedDataPath DerivedData \
+              ARCHS='arm64 x86_64' \
+              ONLY_ACTIVE_ARCH=NO \
+              CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY=- \
+              MARKETING_VERSION="$APP_VERSION" \
+              CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+          done
 
-      - name: Verify and package app
+      - name: Verify and package app and CLI
         env:
           APP_VERSION: ${{ steps.version.outputs.version }}
           ASSET_NAME: ${{ steps.version.outputs.asset-name }}
+          CLI_ASSET_NAME: ${{ steps.version.outputs.cli-asset-name }}
         run: |
           app='DerivedData/Build/Products/Release/TypeAliasFormatter.app'
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
           [[ "$version" == "$APP_VERSION" ]]
           lipo "$app/Contents/MacOS/TypeAliasFormatter" -verify_arch arm64 x86_64
           codesign --verify --deep --strict "$app"
+          cli='DerivedData/Build/Products/Release/typealias-formatter'
+          lipo "$cli" -verify_arch arm64 x86_64
+          codesign --verify --strict "$cli"
+          bash Scripts/test-cli.sh "$cli"
           mkdir -p dist
           ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$ASSET_NAME"
+          ditto -c -k --norsrc --noextattr "$cli" "dist/$CLI_ASSET_NAME"
+          [[ "$(unzip -Z -1 "dist/$CLI_ASSET_NAME")" == 'typealias-formatter' ]]
 
-      - name: Store app ZIP
+      - name: Store release assets
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: macOS-app-${{ github.run_attempt }}
-          path: dist/${{ steps.version.outputs.asset-name }}
+          name: macOS-tools-${{ github.run_attempt }}
+          path: |
+            dist/${{ steps.version.outputs.asset-name }}
+            dist/${{ steps.version.outputs.cli-asset-name }}
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -119,32 +136,37 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download app ZIP
+      - name: Download release assets
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           artifact-ids: ${{ needs.build.outputs.artifact-id }}
           merge-multiple: true
           path: dist
 
-      - name: Create release and upload ZIP
+      - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
           ASSET_NAME: ${{ needs.build.outputs.asset-name }}
+          CLI_ASSET_NAME: ${{ needs.build.outputs.cli-asset-name }}
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          Universal macOS app for Apple Silicon and Intel. Requires macOS 14 or later.
+          Universal macOS app and CLI for Apple Silicon and Intel. Requires macOS 14 or later.
 
-          This build uses ad-hoc signing and is not notarized.
+          These builds use ad-hoc signing and are not notarized.
           EOF
+          release_assets=(
+            "dist/$ASSET_NAME"
+            "dist/$CLI_ASSET_NAME"
+          )
           if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/release-draft"; then
-            gh release upload "$RELEASE_TAG" "dist/$ASSET_NAME" --clobber
+            gh release upload "$RELEASE_TAG" "${release_assets[@]}" --clobber
             if [[ "$(cat "$RUNNER_TEMP/release-draft")" == "true" ]]; then
               gh release edit "$RELEASE_TAG" --draft=false
             fi
           else
-            gh release create "$RELEASE_TAG" "dist/$ASSET_NAME" \
+            gh release create "$RELEASE_TAG" "${release_assets[@]}" \
               --verify-tag \
               --title "TypeAlias Formatter $RELEASE_TAG" \
               --generate-notes \

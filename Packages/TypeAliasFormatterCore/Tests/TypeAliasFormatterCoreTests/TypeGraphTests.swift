@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import TypeAliasFormatting
+@testable import TypeAliasFormatterCore
 
 @Suite struct TypeGraphTests {
     @Test func sharesTypeStructureWithText() throws {

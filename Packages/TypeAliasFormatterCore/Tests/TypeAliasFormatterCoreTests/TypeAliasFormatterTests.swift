@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import TypeAliasFormatting
+@testable import TypeAliasFormatterCore
 
 @Suite struct TypeAliasFormatterTests {
     private let formatter = TypeAliasFormatter()
@@ -145,15 +145,9 @@ import Testing
     }
 
     private func fixture(_ name: String, extension ext: String) throws -> String {
-        #if SWIFT_PACKAGE
         let bundle = Bundle.module
-        #else
-        let bundle = Bundle(for: BundleToken.self)
-        #endif
         let url = try #require(bundle.url(forResource: name, withExtension: ext, subdirectory: "Fixtures")
             ?? bundle.url(forResource: name, withExtension: ext))
         return try String(contentsOf: url, encoding: .utf8)
     }
 }
-
-private final class BundleToken: NSObject {}
