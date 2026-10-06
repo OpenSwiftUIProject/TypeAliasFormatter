@@ -4,6 +4,7 @@
 .swiftpm/
 Derived/
 DerivedData/
+dist/
 *.xcodeproj/
 *.xcworkspace/
 *.xcresult/

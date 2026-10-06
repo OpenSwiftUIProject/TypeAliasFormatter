@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App version for a build-only run
+        required: true
+        default: '0.1.0'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build macOS app
+    runs-on: macos-26
+    timeout-minutes: 20
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      asset-name: ${{ steps.version.outputs.asset-name }}
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set app version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$INPUT_VERSION"
+          fi
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Expected a version in MAJOR.MINOR.PATCH format."
+            exit 1
+          fi
+          {
+            echo "version=$version"
+            echo "asset-name=TypeAliasFormatter-v${version}-macOS.zip"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Install Tuist
+        uses: jdx/mise-action@2d8d4cafcbd33be2ea37d2b6f5ad595363d1f1ca # v5.1.1
+        with:
+          tool_versions: |
+            tuist 4.206.0
+
+      - name: Test formatting library
+        run: swift test
+
+      - name: Generate workspace
+        run: tuist generate --no-open
+
+      - name: Build universal app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          xcodebuild build \
+            -workspace TypeAliasFormatter.xcworkspace \
+            -scheme TypeAliasFormatter \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath DerivedData \
+            ARCHS='arm64 x86_64' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY=- \
+            MARKETING_VERSION="$APP_VERSION" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Verify and package app
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          ASSET_NAME: ${{ steps.version.outputs.asset-name }}
+        run: |
+          app='DerivedData/Build/Products/Release/TypeAliasFormatter.app'
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Contents/Info.plist")
+          [[ "$version" == "$APP_VERSION" ]]
+          lipo "$app/Contents/MacOS/TypeAliasFormatter" -verify_arch arm64 x86_64
+          codesign --verify --deep --strict "$app"
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent "$app" "dist/$ASSET_NAME"
+
+      - name: Store app ZIP
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: macOS-app-${{ github.run_attempt }}
+          path: dist/${{ steps.version.outputs.asset-name }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download app ZIP
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact-id }}
+          merge-multiple: true
+          path: dist
+
+      - name: Create release and upload ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ASSET_NAME: ${{ needs.build.outputs.asset-name }}
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          Universal macOS app for Apple Silicon and Intel. Requires macOS 14 or later.
+
+          This build uses ad-hoc signing and is not notarized.
+          EOF
+          if gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft' > "$RUNNER_TEMP/release-draft"; then
+            gh release upload "$RELEASE_TAG" "dist/$ASSET_NAME" --clobber
+            if [[ "$(cat "$RUNNER_TEMP/release-draft")" == "true" ]]; then
+              gh release edit "$RELEASE_TAG" --draft=false
+            fi
+          else
+            gh release create "$RELEASE_TAG" "dist/$ASSET_NAME" \
+              --verify-tag \
+              --title "TypeAlias Formatter $RELEASE_TAG" \
+              --generate-notes \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi

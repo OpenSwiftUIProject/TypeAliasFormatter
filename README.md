@@ -81,3 +81,18 @@ The `TypeAliasFormattingTests` Xcode scheme runs the same tests. Fixtures verify
 the full reference layout after removing its declaration header and code fence.
 Tests also cover graph structure, node layout, collapse behavior, and SVG output.
 No third-party packages are required.
+
+## Release
+
+Push a tag in `vMAJOR.MINOR.PATCH` format, such as `v0.1.0`, to run the Release
+workflow. It uses Xcode 26.6 and Tuist 4.206.0 to test the formatting library and
+build a universal app for Apple Silicon and Intel. The app version comes from
+the tag, and the build number comes from the workflow run number.
+
+The workflow creates a GitHub Release and uploads
+`TypeAliasFormatter-v<version>-macOS.zip`. The app requires macOS 14 or later.
+Release builds use ad-hoc signing and are not notarized.
+
+For a build check before tagging, run **Release** manually from the Actions tab
+and enter the app version. Manual runs store the ZIP as a workflow artifact and
+do not publish a GitHub Release.

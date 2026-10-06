@@ -27,14 +27,16 @@ let project = Project(
             deploymentTargets: .macOS("14.0"),
             infoPlist: .extendingDefault(with: [
                 "CFBundleDisplayName": "TypeAlias Formatter",
-                "CFBundleShortVersionString": "1.0.0",
-                "CFBundleVersion": "1",
+                "CFBundleShortVersionString": "$(MARKETING_VERSION)",
+                "CFBundleVersion": "$(CURRENT_PROJECT_VERSION)",
                 "LSApplicationCategoryType": "public.app-category.developer-tools",
                 "NSHumanReadableCopyright": "Copyright © 2026 OpenSwiftUI Project",
             ]),
             buildableFolders: ["App/Sources", "App/Resources"],
             dependencies: [.target(name: "TypeAliasFormatting")],
             settings: .settings(base: [
+                "MARKETING_VERSION": "0.1.0",
+                "CURRENT_PROJECT_VERSION": "1",
                 "ASSETCATALOG_COMPILER_APPICON_NAME": "AppIcon",
                 "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME": "AccentColor",
                 "ENABLE_APP_SANDBOX": "YES",
