@@ -1,0 +1,10 @@
+.DS_Store
+.build/
+.module-cache/
+.swiftpm/
+Derived/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+*.xcresult/
+*.log
