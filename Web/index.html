@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f7f9fc">
+    <meta name="description" content="Format and explore Swift types with linked source, text, and graph views. All processing runs in your browser.">
+    <link rel="icon" href="../Documentation/Images/app-icon-composer.png">
+    <title>TypeAlias Formatter</title>
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="brand"><img id="app-icon" alt="" width="40" height="40"><h1>TypeAlias Formatter</h1></div>
+      <nav aria-label="Project links"><a href="https://github.com/OpenSwiftUIProject/TypeAliasFormatter/releases/latest">Download app &amp; CLI</a><a href="https://github.com/OpenSwiftUIProject/TypeAliasFormatter">GitHub</a></nav>
+    </header>
+    <main class="workspace" aria-label="Type formatter">
+      <div class="toolbar">
+        <button id="open" type="button" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5h6l2 2h10v13H3z"/></svg>Open file</button>
+        <input id="file" type="file" accept=".swift,.txt,.md,text/plain" hidden>
+        <div class="settings">
+          <label>Indentation <select id="indent" disabled><option value="2">2 spaces</option><option value="4" selected>4 spaces</option><option value="8">8 spaces</option><option value="0">Tab</option></select></label>
+          <label class="checkbox"><input id="expand-generics" type="checkbox" disabled>Expand generics</label>
+        </div>
+        <div class="export-actions"><button id="copy" type="button" disabled>Copy</button><button id="save" type="button" disabled>Save</button></div>
+      </div>
+      <div class="panes">
+        <section class="pane source-pane" aria-labelledby="source-heading">
+          <div class="pane-header"><div><h2 id="source-heading">Source</h2><p>Swift typealias or demangled type</p></div><div class="pane-actions"><label class="checkbox"><input id="wrap" type="checkbox" checked>Wrap lines</label><button id="clear" type="button" disabled>Clear</button></div></div>
+          <div id="source-editor" class="editor"></div>
+        </section>
+        <section class="pane output-pane" aria-labelledby="output-heading">
+          <div class="pane-header"><div><h2 id="output-heading">Formatted</h2><p id="selection-info">Select a type in either pane</p></div><div class="tabs" role="tablist" aria-label="Output format"><button id="text-tab" role="tab" aria-selected="true" aria-controls="text-panel">Text tree</button><button id="graph-tab" role="tab" aria-selected="false" aria-controls="graph-panel" tabindex="-1">Graph</button></div></div>
+          <div id="text-panel" role="tabpanel" aria-labelledby="text-tab" class="output-panel"><div id="text-editor" class="editor"></div></div>
+          <div id="graph-panel" role="tabpanel" aria-labelledby="graph-tab" class="output-panel" hidden>
+            <div class="graph-toolbar"><button id="expand-all" disabled>Expand all</button><button id="collapse-all" disabled>Collapse all</button><span class="spacer"></span><button id="zoom-out" aria-label="Zoom out" disabled>−</button><output id="zoom-level">80%</output><button id="zoom-in" aria-label="Zoom in" disabled>+</button><button id="fit" disabled>Fit</button></div>
+            <div id="graph-scroll" tabindex="0" aria-label="Type graph"><div id="graph-canvas"></div><p id="graph-placeholder">Converted graph appears here.</p></div>
+            <p class="graph-hint">Select a node to trace its source. Use the arrow to fold arguments.</p>
+          </div>
+        </section>
+      </div>
+      <div class="status-bar"><span id="status" role="status" aria-live="polite">Loading formatter…</span><span id="character-count">0 characters</span></div>
+    </main>
+    <footer>All formatting runs locally in your browser.</footer>
+    <script type="module" src="/main.js"></script>
+  </body>
+</html>

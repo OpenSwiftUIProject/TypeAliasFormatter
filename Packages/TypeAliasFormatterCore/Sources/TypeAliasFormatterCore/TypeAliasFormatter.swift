@@ -25,40 +25,57 @@ public struct TypeAliasFormatter: Sendable {
         guard !input.isEmpty else {
             throw FormattingError("Enter a typealias declaration or a type.")
         }
-        var parser = Parser(input)
+        var parser = Parser(String(input), offset: source[..<input.startIndex].utf16.count)
         let nodes = try parser.parse()
         let text = Renderer(indentation: indentation, expandSingleArguments: expandSingleArguments)
             .render(nodes, level: 0)
-        return FormattedType(text: text, graph: GraphBuilder().build(nodes))
+        var sourceRanges: [String: UTF16Range] = [:]
+        let graph = GraphBuilder().build(nodes, ranges: &sourceRanges)
+        var outputParser = Parser(text)
+        var formattedRanges: [String: UTF16Range] = [:]
+        _ = GraphBuilder().build(try outputParser.parse(), ranges: &formattedRanges)
+        let mappings = sourceRanges.keys.sorted().map { id in
+            TypeMapping(id: id, sourceRange: sourceRanges[id]!, formattedRange: formattedRanges[id]!)
+        }
+        return FormattedType(text: text, graph: graph, mappings: mappings)
     }
 
-    private func typeExpression(in source: String) throws -> String {
-        let input = source.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func typeExpression(in source: Substring) throws -> Substring {
+        let input = trimmed(source)
         let words = input.split(whereSeparator: \.isWhitespace)
         guard words.filter({ $0 == "typealias" }).count <= 1 else {
             throw FormattingError("Format one typealias declaration at a time.")
         }
-        guard input.range(of: #"^(?:(?:public|package|internal|fileprivate|private)\s+)?typealias\b"#,
+        guard String(input).range(of: #"^(?:(?:public|package|internal|fileprivate|private)\s+)?typealias\b"#,
                           options: .regularExpression) != nil else { return input }
         guard let assignment = input.firstIndex(of: "=") else {
             throw FormattingError("A typealias needs '=' followed by a type.")
         }
-        let type = input[input.index(after: assignment)...].trimmingCharacters(in: .whitespacesAndNewlines)
+        let type = trimmed(input[input.index(after: assignment)...])
         guard !type.isEmpty else { throw FormattingError("A typealias needs '=' followed by a type.") }
         return type
     }
 
-    private func unwrap(_ source: String) throws -> String {
-        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("```") else { return source }
-        let lines = trimmed.components(separatedBy: .newlines)
-        guard lines.count >= 3,
-              lines.first == "```swift" || lines.first == "```",
-              lines.last == "```" else {
+    private func unwrap(_ source: String) throws -> Substring {
+        let input = trimmed(source[...])
+        guard input.hasPrefix("```") else { return input }
+        guard let firstNewline = input.firstIndex(where: \.isNewline),
+              let lastNewline = input.lastIndex(where: \.isNewline),
+              firstNewline < lastNewline,
+              input[..<firstNewline] == "```swift" || input[..<firstNewline] == "```",
+              input[input.index(after: lastNewline)...] == "```" else {
             throw FormattingError("Use one complete Swift Markdown code block.")
         }
-        return lines.dropFirst().dropLast().joined(separator: "\n")
+        return input[input.index(after: firstNewline)..<lastNewline]
     }
+}
+
+private func trimmed(_ value: Substring) -> Substring {
+    var start = value.startIndex
+    var end = value.endIndex
+    while start < end, value[start].isWhitespace { start = value.index(after: start) }
+    while start < end, value[value.index(before: end)].isWhitespace { end = value.index(before: end) }
+    return value[start..<end]
 }
 
 private struct FormattingError: LocalizedError {
@@ -70,18 +87,24 @@ private struct FormattingError: LocalizedError {
 }
 
 private indirect enum Node {
-    case text(String)
-    case group(Character, [[Node]])
+    case text(String, UTF16Range)
+    case group(Character, [[Node]], UTF16Range)
+
+    var range: UTF16Range {
+        switch self {
+        case let .text(_, range), let .group(_, _, range): range
+        }
+    }
 
     var hasContent: Bool {
-        if case let .text(text) = self {
+        if case let .text(text, _) = self {
             return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
         return true
     }
 
     var containsGeneric: Bool {
-        guard case let .group(opening, arguments) = self else { return false }
+        guard case let .group(opening, arguments, _) = self else { return false }
         return opening == "<" || arguments.joined().contains(where: \.containsGeneric)
     }
 }
@@ -89,36 +112,63 @@ private indirect enum Node {
 private struct Parser {
     private let characters: [Character]
     private var index = 0
+    private let offsets: [Int]
 
-    init(_ source: String) { characters = Array(source) }
-
-    mutating func parse() throws -> [Node] {
-        try arguments(closing: nil, depth: 0)[0]
+    init(_ source: String, offset: Int = 0) {
+        characters = Array(source)
+        var offsets = [offset]
+        for character in characters { offsets.append(offsets.last! + character.utf16.count) }
+        self.offsets = offsets
     }
 
-    private mutating func arguments(closing: Character?, depth: Int) throws -> [[Node]] {
-        guard depth <= 128 else { throw error("Nesting exceeds 128 levels.") }
+    private func range(_ start: Int, _ end: Int) -> UTF16Range {
+        UTF16Range(offsets[start], offsets[end])
+    }
+
+    private struct Frame {
+        let opening: Character?
+        let start: Int
         var arguments: [[Node]] = []
         var nodes: [Node] = []
         var text = ""
+        var textStart = 0
 
-        func hasContent() -> Bool {
+        var closing: Character? {
+            switch opening {
+            case "<": ">"
+            case "(": ")"
+            case "[": "]"
+            default: nil
+            }
+        }
+
+        var hasContent: Bool {
             nodes.contains(where: \.hasContent) || !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
 
-        func appendText() {
+        mutating func appendText(end: Int, characters: [Character], offsets: [Int]) {
             if !text.isEmpty {
-                nodes.append(.text(text))
+                var start = textStart
+                var end = end
+                while start < end, characters[start].isWhitespace { start += 1 }
+                while start < end, characters[end - 1].isWhitespace { end -= 1 }
+                nodes.append(.text(text, UTF16Range(offsets[start], offsets[end])))
             }
             text = ""
         }
+    }
 
+    mutating func parse() throws -> [Node] {
+        // Keep nested argument state off the thread stack, including in Debug builds.
+        var frames = [Frame(opening: nil, start: 0)]
         while index < characters.count {
+            let top = frames.count - 1
+            if frames[top].text.isEmpty { frames[top].textStart = index }
             let character = characters[index]
             let next = index + 1 < characters.count ? characters[index + 1] : nil
             // An arrow closes no group, even when there are no surrounding spaces.
             if character == "-", next == ">" {
-                text += "->"
+                frames[top].text += "->"
                 index += 2
                 continue
             }
@@ -126,54 +176,56 @@ private struct Parser {
                 throw error("Remove comments before formatting a type.")
             }
             if character == "`" {
-                text.append(character)
+                frames[top].text.append(character)
                 index += 1
                 while index < characters.count, characters[index] != "`" {
-                    text.append(characters[index])
+                    frames[top].text.append(characters[index])
                     index += 1
                 }
                 guard index < characters.count else { throw error("Missing closing backtick.") }
-                text.append("`")
+                frames[top].text.append("`")
                 index += 1
                 continue
             }
             if character == "<" || character == "(" || character == "[" {
-                appendText()
+                frames[top].appendText(end: index, characters: characters, offsets: offsets)
+                let start = index
                 index += 1
-                let closing: Character = character == "<" ? ">" : character == "(" ? ")" : "]"
-                let children = try self.arguments(closing: closing, depth: depth + 1)
-                nodes.append(.group(character, children))
+                guard frames.count <= 128 else { throw error("Nesting exceeds 128 levels.") }
+                frames.append(Frame(opening: character, start: start))
                 continue
             }
             if character == "," {
-                guard closing != nil else { throw error("A comma must be inside a type argument list or tuple.") }
-                guard hasContent() else { throw error("Missing type before ','.") }
-                appendText()
-                arguments.append(nodes)
-                nodes = []
+                guard frames[top].closing != nil else { throw error("A comma must be inside a type argument list or tuple.") }
+                guard frames[top].hasContent else { throw error("Missing type before ','.") }
+                frames[top].appendText(end: index, characters: characters, offsets: offsets)
+                frames[top].arguments.append(frames[top].nodes)
+                frames[top].nodes = []
                 index += 1
                 continue
             }
             if character == ">" || character == ")" || character == "]" {
+                let closing = frames[top].closing
                 guard character == closing else {
                     let expected = closing.map { " Expected '\($0)'." } ?? ""
                     throw error("Unexpected '\(character)'.\(expected)")
                 }
-                guard hasContent() || (closing == ")" && arguments.isEmpty) else {
+                guard frames[top].hasContent || (closing == ")" && frames[top].arguments.isEmpty) else {
                     throw error("Missing type before '\(character)'.")
                 }
-                appendText()
-                arguments.append(nodes)
+                frames[top].appendText(end: index, characters: characters, offsets: offsets)
+                var frame = frames.removeLast()
+                frame.arguments.append(frame.nodes)
                 index += 1
-                return arguments
+                frames[frames.count - 1].nodes.append(.group(frame.opening!, frame.arguments, range(frame.start, index)))
+                continue
             }
-            text.append(character)
+            frames[top].text.append(character)
             index += 1
         }
-        if let closing { throw error("Missing closing '\(closing)'.") }
-        appendText()
-        arguments.append(nodes)
-        return arguments
+        if let closing = frames.last?.closing { throw error("Missing closing '\(closing)'.") }
+        frames[0].appendText(end: index, characters: characters, offsets: offsets)
+        return frames[0].nodes
     }
 
     private func error(_ message: String) -> FormattingError {
@@ -192,9 +244,9 @@ private struct Renderer {
         var output = ""
         for node in nodes {
             switch node {
-            case let .text(text):
+            case let .text(text, _):
                 output += normalized(text)
-            case let .group(opening, arguments):
+            case let .group(opening, arguments, _):
                 let closing = opening == "<" ? ">" : opening == "(" ? ")" : "]"
                 if opening == "<" {
                     while output.last?.isWhitespace == true { output.removeLast() }
@@ -230,23 +282,30 @@ private struct Renderer {
 }
 
 private struct GraphBuilder {
-    func build(_ nodes: [Node]) -> TypeGraphNode {
+    func build(_ nodes: [Node], id: String = "root", ranges: inout [String: UTF16Range]) -> TypeGraphNode {
+        if let first = nodes.first(where: \.hasContent), let last = nodes.last(where: \.hasContent) {
+            ranges[id] = UTF16Range(first.range.lowerBound, last.range.upperBound)
+        }
         var label = ""
         var children: [TypeGraphNode] = []
         var genericCount = 0
         for node in nodes {
             switch node {
-            case let .text(text):
+            case let .text(text, _):
                 label += text
-            case let .group(opening, arguments):
+            case let .group(opening, arguments, _):
                 let closing = opening == "<" ? ">" : opening == "(" ? ")" : "]"
                 if opening == "<" {
                     label += "<…>"
                     genericCount += 1
-                    children += arguments.map(build)
+                    for argument in arguments {
+                        children.append(build(argument, id: "\(id).\(children.count)", ranges: &ranges))
+                    }
                 } else if node.containsGeneric || arguments.count > 1 {
                     label += String(opening) + "…" + closing
-                    children += arguments.map(build)
+                    for argument in arguments {
+                        children.append(build(argument, id: "\(id).\(children.count)", ranges: &ranges))
+                    }
                 } else {
                     label += Renderer(indentation: .fourSpaces, expandSingleArguments: false).render([node], level: 0)
                 }

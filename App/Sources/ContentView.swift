@@ -8,6 +8,7 @@ private enum OutputMode: String, CaseIterable, Identifiable {
     case graph = "Graph"
 
     var id: Self { self }
+    var title: String { self == .text ? "Text tree" : "Graph" }
     var fileExtension: String { self == .text ? "txt" : "svg" }
     var contentType: UTType { UTType(filenameExtension: fileExtension) ?? .plainText }
 }
@@ -21,8 +22,8 @@ private struct FormatRequest: Hashable, Sendable {
 
 struct ContentView: View {
     @State private var source = ""
-    @State private var formatted = ""
-    @State private var graph: TypeGraphNode?
+    @State private var conversion: FormattedType?
+    @State private var selectedID: String?
     @State private var collapsedNodes: Set<String> = []
     @State private var completedRequest: FormatRequest?
     @State private var formatError: String?
@@ -33,6 +34,27 @@ struct ContentView: View {
     @AppStorage("wrapSourceLines") private var wrapSourceLines = true
     @AppStorage("expandSingleArguments") private var expandSingleArguments = false
     @AppStorage("presentationMode") private var outputMode: OutputMode = .text
+
+    private var formatted: String { conversion?.text ?? "" }
+    private var graph: TypeGraphNode? { conversion?.graph }
+    private var selectedMapping: TypeMapping? {
+        guard isCurrent else { return nil }
+        return conversion?.mappings.first { $0.id == selectedID }
+    }
+
+    private func selectNode(_ id: String?) {
+        selectedID = id
+        guard let id else { return }
+        let parts = id.split(separator: ".")
+        for length in 1..<parts.count {
+            collapsedNodes.remove(parts.prefix(length).joined(separator: "."))
+        }
+    }
+
+    private func selectRange(_ range: NSRange, in representation: TypeRepresentation) {
+        guard isCurrent, let conversion else { return }
+        selectNode(conversion.mapping(containing: UTF16Range(range.location, NSMaxRange(range)), in: representation)?.id)
+    }
 
     private var request: FormatRequest {
         FormatRequest(source: source, indentation: indentation,
@@ -103,6 +125,7 @@ struct ContentView: View {
         }
         .task(id: request) { await format(request) }
         .onChange(of: output) { copied = false }
+        .onChange(of: source) { selectedID = nil }
         .onChange(of: outputMode) { copied = false }
         .onChange(of: collapsedNodes) { copied = false }
         .alert("File operation failed", isPresented: Binding(
@@ -134,7 +157,7 @@ struct ContentView: View {
                         .disabled(source.isEmpty)
                 } else {
                     Picker("Output format", selection: $outputMode) {
-                        ForEach(OutputMode.allCases) { Text($0.rawValue).tag($0) }
+                        ForEach(OutputMode.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -146,12 +169,15 @@ struct ContentView: View {
             .background(.bar)
             Divider()
             if !isInput, outputMode == .graph, canExport, let graph, let graphLayout {
-                TypeGraphView(root: graph, layout: graphLayout, collapsed: $collapsedNodes)
+                TypeGraphView(root: graph, layout: graphLayout, collapsed: $collapsedNodes,
+                              selectedID: selectedID, onSelect: selectNode)
             } else {
                 ZStack(alignment: .topLeading) {
                     CodeEditor(text: isInput ? $source : .constant(output),
                                editable: isInput, accessibilityLabel: isInput ? "Source typealias" : "Formatted output",
-                               wrapsLines: isInput && wrapSourceLines)
+                               wrapsLines: isInput && wrapSourceLines,
+                               linkedRange: isInput ? selectedMapping?.sourceRange : selectedMapping?.formattedRange,
+                               onSelectionChange: { selectRange($0, in: isInput ? .source : .formatted) })
                     if (isInput ? source : output).isEmpty {
                         Text(isInput ? "Paste a typealias or type here…" : "Converted output appears here.")
                             .font(.system(size: 13, design: .monospaced))
@@ -192,8 +218,7 @@ struct ContentView: View {
         do { try await Task.sleep(for: .milliseconds(180)) } catch { return }
         guard !Task.isCancelled else { return }
         if request.source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            formatted = ""
-            graph = nil
+            conversion = nil
             formatError = nil
             completedRequest = request
             return
@@ -207,17 +232,15 @@ struct ContentView: View {
         guard !Task.isCancelled else { return }
         switch result {
         case let .success(value):
-            formatted = value.text
             if graph != value.graph {
-                graph = value.graph
                 collapsedNodes = Set(GraphLayout(root: value.graph).nodes.filter {
                     $0.id.split(separator: ".").count >= 3 && $0.childCount > 0
                 }.map(\.id))
             }
+            conversion = value
             formatError = nil
         case let .failure(error):
-            formatted = ""
-            graph = nil
+            conversion = nil
             formatError = error.localizedDescription
         }
         completedRequest = request

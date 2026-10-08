@@ -1,11 +1,12 @@
 import Foundation
 
-public struct FormattedType: Sendable {
+public struct FormattedType: Sendable, Codable {
     public let text: String
     public let graph: TypeGraphNode
+    public let mappings: [TypeMapping]
 }
 
-public struct TypeGraphNode: Sendable, Equatable {
+public struct TypeGraphNode: Sendable, Equatable, Codable {
     public let label: String
     public let children: [TypeGraphNode]
 
@@ -17,7 +18,7 @@ public struct TypeGraphNode: Sendable, Equatable {
     public var nodeCount: Int { 1 + children.reduce(0) { $0 + $1.nodeCount } }
 }
 
-public struct GraphPlacement: Sendable, Identifiable {
+public struct GraphPlacement: Sendable, Identifiable, Codable {
     public let id: String
     public let label: String
     public let childCount: Int
@@ -41,7 +42,7 @@ public struct GraphPlacement: Sendable, Identifiable {
     }
 }
 
-public struct GraphEdge: Sendable {
+public struct GraphEdge: Sendable, Codable {
     public let parentID: String
     public let childID: String
     public let startX: Double
@@ -50,7 +51,7 @@ public struct GraphEdge: Sendable {
     public let endY: Double
 }
 
-public struct GraphLayout: Sendable {
+public struct GraphLayout: Sendable, Codable {
     public static let nodeWidth = 256.0
     public static let nodeHeight = 84.0
     public let nodes: [GraphPlacement]
@@ -104,7 +105,7 @@ public struct GraphLayout: Sendable {
             elements.append(#"<path d="M \#(edge.startX) \#(edge.startY) C \#(middle) \#(edge.startY), \#(middle) \#(edge.endY), \#(edge.endX) \#(edge.endY)" fill="none" stroke="rgb(160,173,192)" stroke-width="1.5"/>"#)
         }
         for node in nodes {
-            elements.append("<g><title>\(Self.escape(node.label))</title>")
+            elements.append("<g data-node-id=\"\(node.id)\"><title>\(Self.escape(node.label))</title>")
             elements.append(#"<rect x="\#(node.x)" y="\#(node.y)" width="\#(Self.nodeWidth)" height="\#(Self.nodeHeight)" rx="10" fill="white" stroke="rgb(91,134,199)"/>"#)
             let lines = node.displayLines
             let top = node.y + Self.nodeHeight / 2 - Double(lines.count - 1) * 8 + 4

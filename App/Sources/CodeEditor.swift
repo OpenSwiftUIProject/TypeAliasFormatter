@@ -1,11 +1,14 @@
 import AppKit
 import SwiftUI
+import TypeAliasFormatterCore
 
 struct CodeEditor: NSViewRepresentable {
     @Binding var text: String
     var editable: Bool
     var accessibilityLabel: String
     var wrapsLines = false
+    var linkedRange: UTF16Range?
+    var onSelectionChange: (NSRange) -> Void = { _ in }
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
@@ -49,9 +52,24 @@ struct CodeEditor: NSViewRepresentable {
             configureWrapping(textView, in: scrollView)
             context.coordinator.wrapsLines = wrapsLines
         }
-        guard textView.string != text else { return }
-        textView.string = text
-        if !editable { highlight(textView) }
+        context.coordinator.isUpdating = true
+        defer { context.coordinator.isUpdating = false }
+        let changed = textView.string != text
+        if changed {
+            textView.string = text
+            if !editable { highlight(textView) }
+        }
+        if changed || context.coordinator.linkedRange != linkedRange {
+            let length = textView.string.utf16.count
+            textView.layoutManager?.removeTemporaryAttribute(.backgroundColor, forCharacterRange: NSRange(location: 0, length: length))
+            if let linkedRange, linkedRange.lowerBound >= 0, linkedRange.upperBound <= length, linkedRange.count > 0 {
+                let range = NSRange(location: linkedRange.lowerBound, length: linkedRange.count)
+                textView.layoutManager?.addTemporaryAttribute(.backgroundColor,
+                    value: NSColor.controlAccentColor.withAlphaComponent(0.22), forCharacterRange: range)
+                textView.scrollRangeToVisible(NSRange(location: range.location, length: 1))
+            }
+            context.coordinator.linkedRange = linkedRange
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -110,12 +128,20 @@ struct CodeEditor: NSViewRepresentable {
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: CodeEditor
         var wrapsLines: Bool?
+        var linkedRange: UTF16Range?
+        var isUpdating = false
 
         init(_ parent: CodeEditor) { self.parent = parent }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             parent.text = textView.string
+        }
+
+        func textViewDidChangeSelection(_ notification: Notification) {
+            guard !isUpdating, let textView = notification.object as? NSTextView,
+                  textView.string == parent.text else { return }
+            parent.onSelectionChange(textView.selectedRange())
         }
     }
 }

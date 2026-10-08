@@ -4,9 +4,12 @@
 
 <h1 align="center">TypeAlias Formatter</h1>
 
-A native macOS app and command-line tool that format nested Swift typealiases
-and demangled type names. Both use the same Core Swift package and preserve
+A native macOS app, browser app, and command-line tool that format nested Swift
+typealiases and demangled type names. All three use the same Core Swift package and preserve
 private names such as `(Modifier in _123ABC)<Style>`.
+
+[Open the web app](https://openswiftuiproject.github.io/TypeAliasFormatter/) ·
+[Download the macOS app and CLI](https://github.com/OpenSwiftUIProject/TypeAliasFormatter/releases/latest)
 
 ![TypeAlias Formatter with wrapped source and formatted text](Documentation/Images/typealias-formatter.png)
 
@@ -21,9 +24,13 @@ The app opens with an empty source pane.
   Tab uses one tab character per level and displays at four-space tab stops.
 - Single-argument generics stay on one line unless a child needs multiple lines.
 - Use **Expand generics** to expand single-argument generics in text too.
-- **Text** shows the formatted type without a declaration header or code fence.
-- **Graph** shows connected type nodes in argument order. Click a node to expand
-  or collapse its children. Use the zoom controls or **Fit** to inspect the tree.
+- **Text tree** shows the formatted type without a declaration header or code fence.
+- Select a type in either text pane to highlight its matching range in the other
+  pane. The same selection appears in **Graph** and survives a mode change.
+- **Graph** shows connected type nodes in argument order. Click a node to
+  highlight its source. Use its arrow to expand or collapse children, and the
+  zoom controls or **Fit** to inspect the tree. Source selection reveals nodes
+  below collapsed ancestors.
 - Graphs initially show two levels of arguments. **Expand all** shows every node.
 - Copy or save Text as plain text (`.txt`), or the visible Graph as SVG (`.svg`).
 - Use **Open** to load a UTF-8 `.swift`, `.md`, or `.txt` file.
@@ -38,7 +45,15 @@ The formatter checks delimiters, empty arguments, and Markdown fences. It keeps
 function arrows, tuples, collection types, and type suffixes intact. This is a
 type layout tool, not a Swift syntax validator. Format one declaration at a time
 and remove comments first. Input is limited to 200 KB and 128 nesting levels.
-All formatting runs locally. The app has no network dependency.
+All formatting runs locally. The native app has no network dependency.
+
+## Web app
+
+The [web app](https://openswiftuiproject.github.io/TypeAliasFormatter/) runs Core
+as WebAssembly with JavaScriptKit. It supports the same linked source, Text tree,
+and Graph selection as the native app, plus file import, text/SVG export, zoom,
+and collapse controls. Input stays in the browser and is never uploaded. Only
+display preferences persist; each new session starts with empty input.
 
 ## CLI
 
@@ -80,14 +95,21 @@ swift build -c release --product typealias-formatter
 | `TypeAliasFormatterCore` Swift package | `Packages/TypeAliasFormatterCore` | Foundation |
 | `TypeAliasFormatterApp` target | `App` | `TypeAliasFormatterCore` |
 | `TypeAliasFormatterCLI` target | `CLI` | `TypeAliasFormatterCore`, ArgumentParser |
+| `TypeAliasFormatterWeb` Swift package and browser UI | `Web` | `TypeAliasFormatterCore`, JavaScriptKit, CodeMirror |
 
-Core contains parsing, text formatting, graph layout, SVG export, and their tests.
+Core contains parsing, text formatting, graph layout, SVG export, UTF-16 source
+and output mappings, and their tests. Stable node IDs link all three views,
+including repeated type names and Unicode input.
 It has no SwiftUI or AppKit dependency. The root `Package.swift` builds and tests
 the CLI with the local Core package. `Project.swift` defines the GUI and CLI
 Xcode targets; both depend on the Core package through Tuist's Swift Package
 integration. Tuist reads the dependencies from the root `Package.swift`, so
 package paths and versions have one definition. Core sources belong only to the
 Core package.
+
+The separate Web package keeps JavaScriptKit out of the native app and CLI
+dependency graph. JavaScript manages the browser UI; Swift handles conversion,
+selection lookup, graph layout, and SVG generation.
 
 The CLI uses Apple's [ArgumentParser](https://github.com/apple/swift-argument-parser).
 Its license is available in `Licenses/SwiftArgumentParser.txt` in this repository.
@@ -138,9 +160,43 @@ bash Scripts/test-cli.sh "$(swift build --show-bin-path)/typealias-formatter"
 
 Core fixtures verify the full reference layout after removing its declaration
 header and code fence. Core tests also cover graph structure, node layout,
-collapse behavior, and SVG output. CLI tests cover file output, indentation,
+collapse behavior, SVG output, and source/output mappings. CLI tests cover file output, indentation,
 input limits, invalid UTF-8, and safe output handling. The integration script
 checks stdin, stdout, error exits, and SVG output with the built executable.
+
+### Web development
+
+Use Swift 6.2.3 with a compatible `wasm32-unknown-wasip1` Swift SDK, plus Node.js
+24. Install the SDK with [setup-swiftwasm](https://github.com/swiftwasm/setup-swiftwasm)
+or the [Swift SDK instructions](https://book.swiftwasm.org/getting-started/setup.html).
+Check `swift --version` and `swift sdk list` before building.
+
+```sh
+cd Web
+npm ci
+PATH="$PWD/node_modules/.bin:$PATH" swift package --swift-sdk <installed-sdk-id> js -c release
+npm run build
+npm run preview
+```
+
+Open `http://127.0.0.1:4173/TypeAliasFormatter/`. For browser UI edits, use
+`npm run dev`; rebuild the Swift package after changing Core or the Web bridge.
+
+Run the browser tests after building the site:
+
+```sh
+npx playwright install --only-shell chromium
+npm test
+```
+
+The tests load the real WebAssembly module. They check linked selection in both
+directions, repeated names, collapsed ancestors, Unicode, file import, SVG
+export, invalid input, persisted settings, and mobile layout.
+
+The **Deploy to GitHub Pages** workflow tests Core on Linux, builds WebAssembly,
+and runs the browser tests before deploying. Pushes to `main` deploy the site;
+app and CLI releases still require a version tag. Set the repository's Pages
+source to **GitHub Actions** when deploying a fork.
 
 ## Release
 

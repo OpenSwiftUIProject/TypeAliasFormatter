@@ -5,6 +5,8 @@ struct TypeGraphView: View {
     let root: TypeGraphNode
     let layout: GraphLayout
     @Binding var collapsed: Set<String>
+    let selectedID: String?
+    let onSelect: (String?) -> Void
     @State private var zoom = 0.8
 
     var body: some View {
@@ -15,6 +17,7 @@ struct TypeGraphView: View {
                         .disabled(collapsed.isEmpty)
                     Button("Collapse all") {
                         collapsed = Set(GraphLayout(root: root).nodes.filter { $0.childCount > 0 }.map(\.id))
+                        if selectedID != nil { onSelect("root") }
                         zoom = 0.8
                     }
                     .disabled(collapsed.contains("root"))
@@ -42,15 +45,32 @@ struct TypeGraphView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 Divider()
-                ScrollView([.horizontal, .vertical]) {
-                    diagram
-                        .scaleEffect(zoom, anchor: .topLeading)
-                        .frame(width: layout.width * zoom, height: layout.height * zoom, alignment: .topLeading)
+                GeometryReader { viewport in
+                    ScrollViewReader { proxy in
+                        ScrollView([.horizontal, .vertical]) {
+                            diagram
+                                .scaleEffect(zoom, anchor: .topLeading)
+                                .frame(width: layout.width * zoom, height: layout.height * zoom, alignment: .topLeading)
+                                .id("diagram")
+                        }
+                        .task(id: selectedID) {
+                            await Task.yield()
+                            guard let node = layout.nodes.first(where: { $0.id == selectedID }) else { return }
+                            // Use the scaled canvas bounds; positioned cards have unscaled scroll targets.
+                            let anchor = UnitPoint(
+                                x: scrollAnchor((node.x + GraphLayout.nodeWidth / 2) * zoom,
+                                                content: layout.width * zoom, viewport: viewport.size.width),
+                                y: scrollAnchor((node.y + GraphLayout.nodeHeight / 2) * zoom,
+                                                content: layout.height * zoom, viewport: viewport.size.height)
+                            )
+                            proxy.scrollTo("diagram", anchor: anchor)
+                        }
+                    }
                 }
                 .background(Color(nsColor: .controlBackgroundColor))
                 Divider()
                 HStack {
-                    Text("Click a node to expand or collapse its arguments.")
+                    Text("Select a node to highlight its source. Use the arrow to fold arguments.")
                     Spacer()
                     Text("\(layout.nodes.count) / \(root.nodeCount) nodes")
                 }
@@ -60,6 +80,11 @@ struct TypeGraphView: View {
                 .padding(.vertical, 8)
             }
         }
+    }
+
+    private func scrollAnchor(_ center: CGFloat, content: CGFloat, viewport: CGFloat) -> CGFloat {
+        guard content > viewport else { return 0 }
+        return min(1, max(0, (center - viewport / 2) / (content - viewport)))
     }
 
     private var diagram: some View {
@@ -77,43 +102,53 @@ struct TypeGraphView: View {
             }
             .accessibilityHidden(true)
             ForEach(layout.nodes) { node in
-                Button {
-                    guard node.childCount > 0 else { return }
-                    if collapsed.contains(node.id) { collapsed.remove(node.id) }
-                    else { collapsed.insert(node.id) }
-                } label: {
-                    HStack(spacing: 10) {
+                HStack(spacing: 0) {
+                    Button { onSelect(node.id) } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(Array(node.displayLines.enumerated()), id: \.offset) { _, line in
-                                Text(line).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+                                Text(line).lineLimit(1)
                             }
                         }
                         .font(.system(size: 12, design: .monospaced))
                         .foregroundStyle(.primary)
-                        Spacer(minLength: 0)
-                        if node.childCount > 0 {
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                        .padding(.leading, 14)
+                        .contentShape(Rectangle())
+                    }
+                    .help(node.label)
+                    .accessibilityLabel(node.label)
+                    .accessibilityValue(selectedID == node.id ? "Selected" : "Not selected")
+                    .accessibilityIdentifier("graph.\(node.id)")
+                    if node.childCount > 0 {
+                        Button {
+                            if collapsed.contains(node.id) { collapsed.remove(node.id) }
+                            else {
+                                collapsed.insert(node.id)
+                                if selectedID?.hasPrefix(node.id + ".") == true { onSelect(node.id) }
+                            }
+                        } label: {
                             VStack(spacing: 5) {
                                 Image(systemName: collapsed.contains(node.id) ? "chevron.right" : "chevron.down")
                                 Text("\(node.childCount)")
                             }
                             .font(.caption2)
                             .foregroundStyle(Color.accentColor)
+                            .frame(width: 36, height: GraphLayout.nodeHeight)
+                            .contentShape(Rectangle())
                         }
+                        .accessibilityLabel("\(collapsed.contains(node.id) ? "Expand" : "Collapse") \(node.label)")
+                        .accessibilityIdentifier("collapse.\(node.id)")
                     }
-                    .padding(.horizontal, 14)
-                    .frame(width: GraphLayout.nodeWidth, height: GraphLayout.nodeHeight)
-                    .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(collapsed.contains(node.id) ? Color.accentColor : .secondary.opacity(0.35))
-                    }
-                    .contentShape(RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
-                .help(node.label)
-                .accessibilityLabel(node.label)
-                .accessibilityValue(node.childCount == 0 ? "Leaf" : collapsed.contains(node.id) ? "Collapsed" : "Expanded")
-                .accessibilityIdentifier("graph.\(node.id)")
+                .frame(width: GraphLayout.nodeWidth, height: GraphLayout.nodeHeight)
+                .background(selectedID == node.id ? Color.accentColor.opacity(0.15) : Color(nsColor: .textBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 10))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10)
+                        .strokeBorder(selectedID == node.id ? Color.accentColor : .secondary.opacity(0.35),
+                                      lineWidth: selectedID == node.id ? 2 : 1)
+                }
                 .position(x: node.x + GraphLayout.nodeWidth / 2, y: node.y + GraphLayout.nodeHeight / 2)
             }
         }

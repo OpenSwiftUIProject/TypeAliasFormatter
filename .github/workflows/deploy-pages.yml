@@ -1,0 +1,82 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: swift:6.2.3
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pages: read
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: Web/package-lock.json
+
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Install the Swift WebAssembly SDK
+        id: swiftwasm
+        uses: swiftwasm/setup-swiftwasm@44f4367dbda85a1394b6d346d3f699a7c766b064 # v2
+        with:
+          target: wasm32-unknown-wasip1
+
+      - name: Test Core
+        run: swift test --package-path Packages/TypeAliasFormatterCore
+
+      - name: Install browser build tools
+        working-directory: Web
+        run: npm ci
+
+      - name: Build WebAssembly
+        working-directory: Web
+        run: PATH="$PWD/node_modules/.bin:$PATH" swift package --swift-sdk "${{ steps.swiftwasm.outputs.swift-sdk-id }}" js -c release
+
+      - name: Build and test the site
+        working-directory: Web
+        run: |
+          npm run build
+          npx playwright install --with-deps --only-shell chromium
+          npm test
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: Web/dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
