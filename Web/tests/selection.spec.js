@@ -42,14 +42,18 @@ test("reveals a source-selected leaf below collapsed ancestors", async ({ page }
   await source(page).fill("Outer<Box<Box<Box<Leaf>>>>");
   await expect(page.locator("#status")).toContainText("5 nodes");
   await page.getByRole("tab", { name: "Graph", exact: true }).click();
-  await page.getByRole("button", { name: "Collapse all", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Leaf", exact: true })).toHaveCount(0);
-  await source(page).press("ControlOrMeta+End");
-  for (let i = 0; i < 5; i++) await source(page).press("ArrowLeft");
-  const leaf = page.getByRole("button", { name: "Leaf", exact: true });
-  await expect(leaf).toHaveAttribute("aria-pressed", "true");
-  await expect(leaf).toBeInViewport();
-  await expect(sourceMark(page)).toHaveText("Leaf");
+  // Repeat after a graph selection has already highlighted the source.
+  for (let cycle = 0; cycle < 2; cycle++) {
+    await page.getByRole("button", { name: "Collapse all", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Leaf", exact: true })).toHaveCount(0);
+    await source(page).press("ControlOrMeta+End");
+    for (let i = 0; i < 5; i++) await source(page).press("ArrowLeft");
+    const leaf = page.getByRole("button", { name: "Leaf", exact: true });
+    await expect(leaf).toHaveAttribute("aria-pressed", "true");
+    await expect(leaf).toBeInViewport();
+    await leaf.click();
+    await expect(sourceMark(page)).toHaveText("Leaf");
+  }
 });
 
 test("maps Unicode inside Markdown and preserves selection when indentation changes", async ({ page }) => {

@@ -165,8 +165,10 @@ function selectNode(id, origin) {
     for (let length = 1; length < parts.length; length++) changed = collapsed.delete(parts.slice(0, length).join(".")) || changed;
     if (changed) renderGraph();
   }
-  markEditor(sourceEditor, mapping?.sourceRange, origin !== "source");
-  markEditor(textEditor, mapping?.formattedRange, origin !== "formatted");
+  // Leave the active editor's native selection intact; decorate the linked pane.
+  const activeOrigin = origin ?? (sourceEditor.hasFocus ? "source" : textEditor.hasFocus ? "formatted" : null);
+  markEditor(sourceEditor, activeOrigin === "source" ? null : mapping?.sourceRange, activeOrigin !== "source");
+  markEditor(textEditor, activeOrigin === "formatted" ? null : mapping?.formattedRange, activeOrigin !== "formatted");
   for (const node of $("graph-canvas").querySelectorAll("g[data-node-id]")) {
     const selected = node.dataset.nodeId === selectedID;
     node.classList.toggle("is-selected", selected);
